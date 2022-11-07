@@ -45,6 +45,7 @@ RUN apk upgrade --no-cache \
     uwsgi \
     uwsgi-python3 \
     brotli \
+    yq \
  && pip3 install --upgrade pip wheel setuptools \
  && pip3 install --no-cache -r requirements.txt \
  && apk del build-dependencies \

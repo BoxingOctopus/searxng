@@ -16,6 +16,7 @@ Environment variables:
   MORTY_KEY     settings.yml : result_proxy.key
   BIND_ADDRESS  uwsgi bind to the specified TCP socket using HTTP protocol.
                 Default value: ${DEFAULT_BIND_ADDRESS}
+  ZLIB_ENABLE   settings.yml : server.zlib_enable
 Volume:
   /etc/searxng  the docker entry point copies settings.yml and uwsgi.ini in
                 this directory (see the -f command line option)"
@@ -69,27 +70,35 @@ patch_searxng_settings() {
     # Make sure that there is trailing slash at the end of BASE_URL
     # see https://www.gnu.org/savannah-checkouts/gnu/bash/manual/bash.html#Shell-Parameter-Expansion
     export BASE_URL="${BASE_URL%/}/"
+    export SECRET_KEY=$(openssl rand -hex 32)
 
     # update settings.yml
-    sed -i \
-        -e "s|base_url: false|base_url: ${BASE_URL}|g" \
-        -e "s/instance_name: \"SearXNG\"/instance_name: \"${INSTANCE_NAME}\"/g" \
-        -e "s/autocomplete: \"\"/autocomplete: \"${AUTOCOMPLETE}\"/g" \
-        -e "s/ultrasecretkey/$(openssl rand -hex 32)/g" \
-        "${CONF}"
+    yq -i e '.general.base_url |= env(BASE_URL)' "${CONF}"
+    yq -i e '.general.instance_name |= env(INSTANCE_NAME)' "${CONF}"
+    yq -i e '.search.autocomplete |= env(AUTOCOMPLETE)' "${CONF}"
+    yq -i e '.server.secret_key |= env(SECRET_KEY)' "${CONF}"
+    # sed -i \
+    #     -e "s|base_url: false|base_url: ${BASE_URL}|g" \
+    #     -e "s/instance_name: \"SearXNG\"/instance_name: \"${INSTANCE_NAME}\"/g" \
+    #     -e "s/autocomplete: \"\"/autocomplete: \"${AUTOCOMPLETE}\"/g" \
+    #     -e "s/ultrasecretkey/$(openssl rand -hex 32)/g" \
+    #     "${CONF}"
 
     # Morty configuration
 
     if [ -n "${MORTY_KEY}" ] && [ -n "${MORTY_URL}" ]; then
-        sed -i -e "s/image_proxy: false/image_proxy: true/g" \
-            "${CONF}"
-        cat >> "${CONF}" <<-EOF
+        yq -i e '.server.image_proxy |= true' "${CONF}"
+        yq -i e '.result_proxy.url |= env(MORTY_URL)' "${CONF}"
+        yq -i e '.result_proxy.key |= !!binary env(MORTY_KEY)' "${CONF}"
+#         sed -i -e "s/image_proxy: false/image_proxy: true/g" \
+#             "${CONF}"
+#         cat >> "${CONF}" <<-EOF
 
-# Morty configuration
-result_proxy:
-   url: ${MORTY_URL}
-   key: !!binary "${MORTY_KEY}"
-EOF
+# # Morty configuration
+# result_proxy:
+#    url: ${MORTY_URL}
+#    key: !!binary "${MORTY_KEY}"
+# EOF
     fi
 }
 
